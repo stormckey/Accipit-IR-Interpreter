@@ -5,6 +5,7 @@ from typing import Union
 from enum import Enum
 
 import sys
+import argparse
 
 @dataclass
 class IRNode(ast_utils.Ast):
@@ -295,7 +296,7 @@ class BaseTransformer(Transformer):
     program = lambda _, items: Program(items)
 
 accipit_grammar = """
-    start : const*
+    start : program
 
     name : /[a-zA-Z.-_]/ /[a-zA-Z0-9.-_]/*
 
@@ -407,3 +408,35 @@ text = """
             ret ()
         }
 """
+step = 0
+
+def parse(file: str) -> Program:
+    with open(file) as f:
+        text = f.read()
+    try:
+        parsed_result = parser.parse(text)
+        return parsed_result
+    except UnexpectedInput as e:
+        print(e.get_context(text))
+        print(f"Syntax error at position {e.column}: {e}")
+        exit(1)
+        
+def eval(program: Program) -> int: 
+    return 0
+
+if __name__ == "__main__":
+    arg_parser = argparse.ArgumentParser(
+        description="Interpreter for Accipit IR")
+    arg_parser.add_argument("file", type=str, help="The IR file to interpret.")
+    arg_parser.add_argument("-d", "--debug", action="store_true",
+                            help="Whether to print debug info.")
+    args = arg_parser.parse_args()
+    if args.debug:
+        print("Debug mode on.")
+        DEBUG = True
+    program = parse(args.file)
+    return_value = eval(program)
+    # 0 green, else red
+    colored_return_value = f"\033[1;32m{return_value}\033[0m" if return_value == 0 else f"\033[1;31m{return_value}\033[0m"
+    print(f'Exit with code {colored_return_value} within {step} steps.')
+    exit(return_value)
