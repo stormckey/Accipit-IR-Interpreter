@@ -16,82 +16,82 @@ class IRNode(ast_utils.Ast):
         raise NotImplementedError("IRNode.__str__() is not implemented.")
 
 @dataclass
-class int_const(IRNode):
+class IntConst(IRNode):
     value: int
 
     def __str__(self):
         return str(self.value)
     
 @dataclass
-class none_const(IRNode):
+class NoneConst(IRNode):
     name: Token
     
     def __str__(self):
         return "none"
     
 @dataclass
-class unit_const(IRNode):
+class UnitConst(IRNode):
     name: Token
     
     def __str__(self):
         return "()"
     
-class region(Enum):
+class Region(Enum):
     GLOBAL = "@"
     PARAM = "#"
     LOCAL = "%"
     
 @dataclass 
-class ident:
-    region: region 
+class Ident:
+    region: Region 
     name: str
 
     def __str__(self):
         return self.region.value + self.name
     
-value = Union[int_const, none_const, unit_const, ident]
+Value = Union[IntConst, NoneConst, UnitConst, Ident]
 
 @dataclass
-class i32(IRNode):
+class I32(IRNode):
     _name: Token
     
     def __str__(self):
         return "i32"
 
 @dataclass
-class unit(IRNode):
+class Unit(IRNode):
     _name: Token
     
     def __str__(self):
         return "()"
     
 @dataclass
-class pointer:
+class Pointer:
     name: str
     
     def __str__(self):
         return self.name
 
 @dataclass
-class function_type:
+class FunType:
     params: list[Token]
     ret: Token
     
     def __str__(self):
         return f"fn ({', '.join(str(param) for param in self.params)}) -> {self.ret}"
     
-tpe = Union[i32, unit, pointer, function_type]
+Type = Union[I32, Unit, Pointer, FunType]
 
 @dataclass
-class binexpr(IRNode):
+class BinExpr(IRNode):
     binop: Token
-    v1: value
-    v2: value
+    v1: Value
+    v2: Value
     
     def __str__(self):
         return f"{self.binop} {self.v1}, {self.v2}"
     
-class binop(Enum):
+class Binop(Enum):
     Add = "add"
     Sub = "sub"
     Mul = "mul"
@@ -107,36 +107,36 @@ class binop(Enum):
     Gt = "gt"
     Ge = "ge"
     
-def str2binop(s: str) -> binop:
-    return binop[s.capitalize()]
+def str2binop(s: str) -> Binop:
+    return Binop[s.capitalize()]
 
 @dataclass
-class alloca(IRNode):
-    tpe: tpe
-    size: int_const
+class Alloca(IRNode):
+    tpe: Type
+    size: IntConst
     
     def __str__(self):
         return f"alloca {self.tpe}, {self.size}"
     
 @dataclass
-class load(IRNode):
-    name: ident
+class Load(IRNode):
+    name: Ident
     
     def __str__(self):
         return f"load {self.name}"
 
 @dataclass
-class store(IRNode):
-    value: value
-    name: ident
+class Store(IRNode):
+    value: Value
+    name: Ident
     
     def __str__(self):
         return f"store {self.value}, {self.name}"
 
 @dataclass
-class gep:
-    tpe: tpe
-    name: ident
+class Gep:
+    tpe: Type
+    name: Ident
     offsets: list[tuple[int, int]]
     
     def __str__(self):
@@ -144,89 +144,89 @@ class gep:
         return f"offset {self.tpe}, {self.name}, {indexing}"
     
 @dataclass
-class fncall:
-    name: ident
-    args: list[value]
+class Fncall:
+    name: Ident
+    args: list[Value]
 
     def __str__(self):
         return f"call {self.name} ({', '.join(str(arg) for arg in self.args)}"
     
-valuebindingop = Union[binexpr, gep, fncall, alloca, load, store]
+ValueBindingOp = Union[BinExpr, Gep, Fncall, Alloca, Load, Store]
 
 @dataclass
-class valuebinding_untyped(IRNode):
-    name: ident
-    op: valuebindingop
+class ValueBindingUntyped(IRNode):
+    name: Ident
+    op: ValueBindingOp
     
     def __str__(self):
         return f"let {self.name} = {self.op}"
     
 @dataclass
-class valuebinding_typed(IRNode):
-    name: ident
-    type: tpe
-    op: valuebindingop
+class ValueBindingTyped(IRNode):
+    name: Ident
+    type: Type
+    op: ValueBindingOp
     
     def __str__(self):
         return f"let {self.name}: {self.type} = {self.op}"
     
-valuebinding = Union[valuebinding_untyped, valuebinding_typed]
+ValueBinding = Union[ValueBindingUntyped, ValueBindingTyped]
 
 @dataclass
-class br(IRNode):
-    cond: value
-    label1: ident
-    label2: ident
+class Br(IRNode):
+    cond: Value
+    label1: Ident
+    label2: Ident
     
     def __str__(self):
         return f"br {self.cond}, label {self.label1}, label {self.label2}"
     
 @dataclass
-class jmp(IRNode):
-    label: ident
+class Jmp(IRNode):
+    label: Ident
     
     def __str__(self):
         return f"jmp label {self.label}"
 
 @dataclass
-class ret(IRNode):
+class Ret(IRNode):
     _keyword: Token
-    value: value
+    value: Value
     
     def __str__(self):
         return f"ret {self.value}"
     
-terminator = Union[br, jmp, ret]
+Terminator = Union[Br, Jmp, Ret]
 
 @dataclass
-class plist:
-    params: list[tuple[ident, tpe]]
+class PList:
+    params: list[tuple[Ident, Type]]
     
     def __str__(self):
         return ", ".join(f"{name} : {tpe}" for name, tpe in self.params)
     
 @dataclass
-class bb:
-    label: ident
-    bindings: list[valuebinding]
-    terminator: terminator
+class BasicBlock:
+    label: Ident
+    bindings: list[ValueBinding]
+    terminator: Terminator
     
     def __str__(self):
         return f"{self.label}:\n" + "\n".join(str(binding) for binding in self.bindings) + "\n{self.terminator}"
     
 @dataclass
-class body:
-    bbs: list[bb]
+class Body:
+    bbs: list[BasicBlock]
     
     def __str__(self):
         return "{" + "\n".join(str(bb) for bb in self.bbs) + "}"
     
 @dataclass
-class global_decl:
-    name: ident
-    tpe: tpe
-    size: int_const
-    values: list[value]
+class GlobalDecl:
+    name: Ident
+    tpe: Type
+    size: IntConst
+    values: list[Value]
     
     def __str__(self):
         if self.values:
@@ -235,29 +235,29 @@ class global_decl:
             return f"{self.name} : {self.tpe}, {self.size}"
         
 @dataclass
-class fun_defn(IRNode):
-    name: ident
-    params: plist
-    ret: tpe
-    body: body
+class FunDefn(IRNode):
+    name: Ident
+    params: PList
+    ret: Type
+    body: Body
     
     def __str__(self):
         return f"fn {self.name} ({self.params}) -> {self.ret} {self.body}"
     
 @dataclass
-class fun_decl(IRNode):
-    name: ident
-    params: plist
-    ret: tpe
+class FunDecl(IRNode):
+    name: Ident
+    params: PList
+    ret: Type
     
     def __str__(self):
         return f"fn {self.name} ({self.params}) -> {self.ret};"
     
-decl = Union[global_decl, fun_defn, fun_decl]
+Decl = Union[GlobalDecl, FunDefn, FunDecl]
 
 @dataclass
-class program:
-    decls: list[decl]
+class Program:
+    decls: list[Decl]
     
     def __str__(self):
         return "\n".join(str(decl) for decl in self.decls)
@@ -266,34 +266,36 @@ class BaseTransformer(Transformer):
     # start = lambda _, children: children
     name = lambda _, children: "".join(children)
     
+    int_const = lambda _, n: IntConst(int(n[0]))
+    none_const = lambda _, n: NoneConst
+    
     SIGNED_INT = lambda _, n: int(n)
 
-    function_type = lambda _, items: function_type(items[:-1], items[-1])
-    pointer = lambda _, items: pointer(items[0].__str__() + "*")
+    function_type = lambda _, items: FunType(items[:-1], items[-1])
+    pointer = lambda _, items: Pointer(items[0].__str__() + "*")
     
-    global_name = lambda _, items: ident(region.GLOBAL, items[0])
-    param_name = lambda _, items: ident(region.PARAM, items[0])
-    local_name = lambda _, items: ident(region.LOCAL, items[0])
+    global_name = lambda _, items: Ident(Region.GLOBAL, items[0])
+    param_name = lambda _, items: Ident(Region.PARAM, items[0])
+    local_name = lambda _, items: Ident(Region.LOCAL, items[0])
     
     binop = lambda _, items: str2binop(items[0])
     
-    gep = lambda _, items: gep(items[0], items[1], [(items[i], items[i+1]) for i in range(2, len(items), 2)])
+    gep = lambda _, items: Gep(items[0], items[1], [(items[i], items[i+1]) for i in range(2, len(items), 2)])
     
-    fncall = lambda _, items: fncall(items[0], items[1:])
+    fncall = lambda _, items: Fncall(items[0], items[1:])
     
-    plist = lambda _, items: plist([(items[i], items[i+1]) for i in range(0, len(items), 2)])
+    plist = lambda _, items: PList([(items[i], items[i+1]) for i in range(0, len(items), 2)])
     
-    bb = lambda _, items: bb(items[0], items[1:-1], items[-1])
+    bb = lambda _, items: BasicBlock(items[0], items[1:-1], items[-1])
     
-    body = lambda _, items: body(items)
+    body = lambda _, items: Body(items)
     
-    global_decl = lambda _, items: global_decl(items[0], items[1], items[2], items[4:])
+    global_decl = lambda _, items: GlobalDecl(items[0], items[1], items[2], items[4:])
     
-    program = lambda _, items: program(items)
-    # int_const = lambda self, n: int(n[0])
+    program = lambda _, items: Program(items)
 
 accipit_grammar = """
-    start : program
+    start : const*
 
     name : /[a-zA-Z.-_]/ /[a-zA-Z0-9.-_]/*
 
@@ -366,11 +368,8 @@ accipit_grammar = """
 
 this_module = sys.modules[__name__]
 accipit_transformer = ast_utils.create_transformer(this_module, BaseTransformer())
-
 parser = Lark(accipit_grammar, parser="lalr", transformer=accipit_transformer)
-# parser = Lark(accipit_grammar, parser="lalr")
 
-# Parse and transform the input string
 text = """
         // a is a global array with 105 i32 elements.
         // Suppose in SysY it is a multi-dimension array `int a[5][3][7]`
@@ -408,10 +407,3 @@ text = """
             ret ()
         }
 """
-
-try:
-    parsed_result = parser.parse(text)
-    print(parsed_result)
-except UnexpectedInput as e:
-    print(e.get_context(text))
-    print(f"Syntax error at position {e.column}: {e}")
