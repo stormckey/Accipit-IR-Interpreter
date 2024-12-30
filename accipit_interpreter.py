@@ -7,6 +7,8 @@ from enum import Enum
 import sys
 import argparse
 
+STEP = 0
+
 class SemanticError(Exception):
     def __init__(self, message):
         self.message = message
@@ -118,6 +120,10 @@ class Environment():
         if name not in self.stack[-1]:
             raise SemanticError(f"Local identifier {name} is not defined.")
         self.stack[-1][name] = value
+        
+    def clear(self):
+        self.global_env.clear()
+        self.stack.clear()
 
 env = Environment()
 
@@ -260,6 +266,18 @@ class Body:
     def __str__(self):
         return "{" + "\n".join(str(bb) for bb in self.bbs) + "}"
     
+    def run(self) -> int:
+        for binding in self.bbs[0].bindings:
+            print(binding)
+            match binding:
+                case ValueBindingUntyped(name, op):
+                    print("untyped")
+                    env.add_local(name.__str__(), op)
+                case ValueBindingTyped(name, _, op):
+                    print("typed")
+                    env.add_local(name.__str__(), op)
+        return 0
+    
 class GlobalDecl:
     name: Ident
     tpe: Type
@@ -283,13 +301,13 @@ class GlobalDecl:
         
 class FunDefn(IRNode):
     name: Ident
-    params: PList
+    params: list[tuple[Ident, Type]]
     ret: Type
     body: Body
     
     def __init__(self, name: Ident, params: PList, ret: Type, body: Body):
         self.name = name
-        self.params = params
+        self.params = params.params
         self.ret = ret
         self.body = body
         env.add_global(name.__str__(), self)
@@ -297,14 +315,13 @@ class FunDefn(IRNode):
     def __str__(self):
         return f"fn {self.name} ({self.params}) -> {self.ret} {self.body}"
     
-    def call(self, args: list[Value]) -> tuple[int, int]:
-        return 0, 0
-        # env.push_stack()
-        # for param, arg in zip(self.params.params, args):
-        #     env.add_local(param[0].__str__(), param[1], arg)
-        # return_value, step = self.body.run()
-        # env.pop_stack()
-        # return return_value, step
+    def call(self, args: list[Value]) -> int:
+        env.push_stack()
+        for param, arg in zip(self.params, args):
+            env.add_local(param[0].__str__(), arg)
+        return_value = self.body.run()
+        env.pop_stack()
+        return return_value
     
 class FunDecl(IRNode):
     name: Ident
@@ -384,9 +401,9 @@ accipit_grammar = """
     | type /\*/ -> pointer
     | "fn" "(" (type ("," type)*)? ")" "->"  type -> function_type
     
-    valuebinding_untyped : "let" ident "=" (binexpr | gep | fncall | alloca | load | store)
-    valuebinding_typed : "let" ident ":" type "=" (binexpr | gep | fncall | alloca | load | store)
-    ?valuebinding : valuebinding_untyped | valuebinding_typed
+    value_binding_untyped : "let" ident "=" (binexpr | gep | fncall | alloca | load | store)
+    value_binding_typed : "let" ident ":" type "=" (binexpr | gep | fncall | alloca | load | store)
+    ?value_binding : value_binding_untyped | value_binding_typed
     ?terminator : br | jmp | ret
     
     ?binexpr : binop value "," value
@@ -411,7 +428,7 @@ accipit_grammar = """
     
     ?label : local_ident ":"
     
-    ?bb : label (valuebinding| terminator)*
+    ?bb : label (value_binding| terminator)*
     
     body : "{" bb* "}"
     
@@ -449,7 +466,7 @@ def parse(file: str) -> Program:
         print(f"Syntax error at position {e.column}: {e}")
         exit(1)
         
-def eval(program: Program) -> tuple[int, int]: 
+def eval(program: Program) -> int: 
     main = env.global_env.get("@main")
     if main is None or not isinstance(main, FunDefn):
         raise SemanticError("Main function is not defined.")
@@ -466,8 +483,8 @@ if __name__ == "__main__":
         print("Debug mode on.")
         DEBUG = True
     program = parse(args.file)
-    return_value, step = eval(program)
+    return_value = eval(program)
     # 0 green, else red
     colored_return_value = f"\033[1;32m{return_value}\033[0m" if return_value == 0 else f"\033[1;31m{return_value}\033[0m"
-    print(f'Exit with code {colored_return_value} within {step} steps.')
+    print(f'Exit with code {colored_return_value} within {STEP} steps.')
     exit(return_value)

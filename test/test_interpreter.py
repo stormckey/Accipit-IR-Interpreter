@@ -1,78 +1,110 @@
 from lark import Lark, Transformer, ast_utils
-from accipit_interpreter import accipit_grammar, accipit_transformer
+from accipit_interpreter import accipit_grammar, accipit_transformer, env
 
 def test_ident():
     parser = Lark(accipit_grammar, parser="lalr", transformer=accipit_transformer, start="ident")
+    env.clear()
     parser.parse("@a")
+    env.clear()
     parser.parse("%1")
+    env.clear()
     parser.parse("#a.b.c")
     
 def test_const():
     parser = Lark(accipit_grammar, parser="lalr", transformer=accipit_transformer, start="const")
+    env.clear()
     parser.parse("3")
+    env.clear()
     parser.parse("none")
+    env.clear()
     parser.parse("()")
+    env.clear()
     parser.parse("+3")
+    env.clear()
     parser.parse("-3")
     
 def test_type():
     parser = Lark(accipit_grammar, parser="lalr", transformer=accipit_transformer, start="type")
+    env.clear()
     parser.parse("i32")
+    env.clear()
     parser.parse("()")
+    env.clear()
     parser.parse("i32*")
+    env.clear()
     parser.parse("fn(i32, i32**) -> i32")
 
 def test_binexpr():
     parser = Lark(accipit_grammar, parser="lalr", transformer=accipit_transformer, start="binexpr")
+    env.clear()
     parser.parse("add 3, %1")
+    env.clear()
     parser.parse("sub @1, %b")
     
 def test_terminator():
     parser = Lark(accipit_grammar, parser="lalr", transformer=accipit_transformer, start="terminator")
+    env.clear()
     parser.parse("br @a, label %true, label %false")
+    env.clear()
     parser.parse("jmp label %b")
+    env.clear()
     parser.parse("ret 3")
     
 def test_alloca():
     parser = Lark(accipit_grammar, parser="lalr", transformer=accipit_transformer, start="alloca")
+    env.clear()
     parser.parse("alloca i32, 3")
 
 def test_load():
     parser = Lark(accipit_grammar, parser="lalr", transformer=accipit_transformer, start="load")
+    env.clear()
     parser.parse("load @a")
 
 def test_store():
     parser = Lark(accipit_grammar, parser="lalr", transformer=accipit_transformer, start="store")
+    env.clear()
     parser.parse("store 3, %b")
 
 def test_gep():
     parser = Lark(accipit_grammar, parser="lalr", transformer=accipit_transformer, start="gep")
+    env.clear()
     parser.parse("offset i32, %a, [2 < 3], [4 < none]")
 
 def test_fncall():
     parser = Lark(accipit_grammar, parser="lalr", transformer=accipit_transformer, start="fncall")
+    env.clear()
     parser.parse("call @a, 3, %b")
 
 def test_let():
-    parser = Lark(accipit_grammar, parser="lalr", transformer=accipit_transformer, start="valuebinding")
+    parser = Lark(accipit_grammar, parser="lalr", transformer=accipit_transformer, start="value_binding")
+    env.clear()
     parser.parse("let @a: i32 = add 3, %b")
-    parser.parse("let %a = alloca i32, 3")
-    parser.parse("let %a = load @a")
-    parser.parse("let %a = store 3, %b")
-    parser.parse("let %a = offset i32, %a, [2 < 3], [4 < none]")
-    parser.parse("let %a = call @a, 3, %b")
+    env.clear()
+    parser.parse("let %1 = alloca i32, 3")
+    env.clear()
+    parser.parse("let %2 = load @a")
+    env.clear()
+    parser.parse("let %3 = store 3, %b")
+    env.clear()
+    parser.parse("let %4 = offset i32, %a, [2 < 3], [4 < none]")
+    env.clear()
+    parser.parse("let %5 = call @a, 3, %b")
     
 def test_plist():
     parser = Lark(accipit_grammar, parser="lalr", transformer=accipit_transformer, start="plist")
+    env.clear()
     parser.parse("#1: i32, #2: i32*")
+    env.clear()
     parser.parse("")
     
 def test_label():
     parser = Lark(accipit_grammar, parser="lalr", transformer=accipit_transformer, start="label")
+    env.clear()
     parser.parse("%L1 :")
     
 def test_bb():
     parser = Lark(accipit_grammar, parser="lalr", transformer=accipit_transformer, start="bb")
+    env.clear()
     parser.parse("""
         %L1 :
             let %a = add 3, %b
@@ -81,6 +113,7 @@ def test_bb():
     
 def test_body():
     parser = Lark(accipit_grammar, parser="lalr", transformer=accipit_transformer, start="body")
+    env.clear()
     parser.parse("""
         {
             %Lentry:
@@ -108,19 +141,24 @@ def test_body():
 
 def test_global():
     parser = Lark(accipit_grammar, parser="lalr", transformer=accipit_transformer, start="global_decl")
+    env.clear()
     parser.parse("@a : region i32 ,3")
-    parser.parse("@a : region i32 , 3 = [1, 2, 3]")
+    env.clear()
+    parser.parse("@b : region i32 , 3 = [1, 2, 3]")
     
 def test_fun_defn():
     parser = Lark(accipit_grammar, parser="lalr", transformer=accipit_transformer, start="fun_defn")
+    env.clear()
     parser.parse("fn @a(#1: i32, #2: i32) -> i32 { %Lentry: ret 3 }")
     
 def test_fun_decl():
     parser = Lark(accipit_grammar, parser="lalr", transformer=accipit_transformer, start="fun_decl")
+    env.clear()
     parser.parse("fn @a (#1: i32, #2: i32) -> i32 ;")
     
 def test_program():
     parser = Lark(accipit_grammar, parser="lalr", transformer=accipit_transformer, start="program")
+    env.clear()
     parser.parse("""
         fn @read_write_array(#array.addr: i32*) -> i32 {
         %entry:
@@ -143,6 +181,7 @@ def test_program():
             ret ()
         }
     """)
+    env.clear()
     parser.parse("""
         fn @add(#1: i32, #2: i32) -> i32 {
         %3:
@@ -211,6 +250,7 @@ def test_program():
             ret %8
         }
     """)
+    env.clear()
     parser.parse("""
         // void print_array(int a[], int len)
         // This is an optimized manually written version.
@@ -277,6 +317,7 @@ def test_program():
             ret ()
         }
     """)
+    env.clear()
     parser.parse("""
         // a is a global array with 105 i32 elements.
         // Suppose in SysY it is a multi-dimension array `int a[5][3][7]`
@@ -314,6 +355,7 @@ def test_program():
             ret ()
         }
     """)
+    env.clear()
     parser.parse("""
         /*
         int if_ifElse_() {
