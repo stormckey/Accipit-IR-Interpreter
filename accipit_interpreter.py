@@ -7,6 +7,10 @@ from enum import Enum
 import sys
 import argparse
 
+class SemanticError(Exception):
+    def __init__(self, message):
+        self.message = message
+        super().__init__(self.message)
 
 @dataclass
 class IRNode(ast_utils.Ast):
@@ -97,25 +101,26 @@ class Environment():
 
     def add_global(self, name: str, tpe: Type, value: Any):
         if name in self.global_env:
-            raise ValueError(f"Global identifier {name} is defined twice.")
+            raise SemanticError(f"Global identifier {name} is defined twice.")
         self.global_env[name] = (tpe, value)
         
     def update_global(self, name: str, value: Any):
         if name not in self.global_env:
-            raise ValueError(f"Global identifier {name} is not defined.")
+            raise SemanticError(f"Global identifier {name} is not defined.")
         self.global_env[name] = (self.global_env[name][0], value)
         
     def add_local(self, name: str, tpe: Type, value: Any):
         if name in self.stack[-1]:
-            raise ValueError(f"Local identifier {name} is defined twice.")
+            raise SemanticError(f"Local identifier {name} is defined twice.")
         self.stack[-1][name] = (tpe, value)
         
     def update_local(self, name: str, value: Any):
         if name not in self.stack[-1]:
-            raise ValueError(f"Local identifier {name} is not defined.")
+            raise SemanticError(f"Local identifier {name} is not defined.")
         self.stack[-1][name] = (self.stack[-1][name][0], value)
 
 env = Environment()
+
 @dataclass
 class BinExpr(IRNode):
     binop: Token
@@ -267,6 +272,8 @@ class GlobalDecl:
         self.size = size
         self.values = values
         env.add_global(name.__str__(), tpe, self)
+        if values and len(values) != size.value:
+            raise SemanticError(f"Global array {name} has size {size} but {len(values)} values are provided.")
     
     def __str__(self):
         if self.values:
@@ -341,7 +348,7 @@ class BaseTransformer(Transformer):
     
     body = lambda _, items: Body(items)
     
-    global_decl = lambda _, items: GlobalDecl(items[0], items[1], items[2], items[4:])
+    global_decl = lambda _, items: GlobalDecl(items[0], items[1], items[2], items[3:])
     
     program = lambda _, items: Program(items)
 
