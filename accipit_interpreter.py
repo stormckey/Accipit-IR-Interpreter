@@ -275,9 +275,9 @@ class BaseTransformer(Transformer):
     function_type = lambda _, items: FunType(items[:-1], items[-1])
     pointer = lambda _, items: Pointer(items[0].__str__() + "*")
     
-    global_name = lambda _, items: Ident(Region.GLOBAL, items[0])
-    param_name = lambda _, items: Ident(Region.PARAM, items[0])
-    local_name = lambda _, items: Ident(Region.LOCAL, items[0])
+    global_ident = lambda _, items: Ident(Region.GLOBAL, items[0])
+    param_ident = lambda _, items: Ident(Region.PARAM, items[0])
+    local_ident = lambda _, items: Ident(Region.LOCAL, items[0])
     
     binop = lambda _, items: str2binop(items[0])
     
@@ -300,9 +300,10 @@ accipit_grammar = """
 
     name : /[a-zA-Z.-_]/ /[a-zA-Z0-9.-_]/*
 
-    ?ident : "@" (name | INT) -> global_name
-    | "#" (name | INT) -> param_name
-    | "%" (name | INT) -> local_name
+    global_ident : "@" (name | INT)
+    param_ident : "#" (name | INT)
+    local_ident : "%" (name | INT)
+    ?ident : global_ident | param_ident | local_ident
 
     int_const : SIGNED_INT -> int_const
     none_const : /none/ -> none_const
@@ -334,25 +335,25 @@ accipit_grammar = """
 
     gep : "offset" type "," ident ( "," "[" value "<" (int_const | none_const) "]" )+
     
-    fncall : "call" ident ("," value)*
+    fncall : "call" global_ident ("," value)*
     
-    br : "br" value "," "label" ident "," "label" ident
-    jmp : "jmp" "label" ident
+    br : "br" value "," "label" local_ident "," "label" local_ident
+    jmp : "jmp" "label" local_ident
     ret : /(?<!\w)ret(?!\w)/ value
     
-    ?plist : (ident ":" type ("," ident ":" type)*)?
+    ?plist : (param_ident ":" type ("," param_ident ":" type)*)?
     
-    ?label : ident ":"
+    ?label : local_ident ":"
     
     ?bb : label (valuebinding| terminator)*
     
     body : "{" bb* "}"
     
-    global_decl : ident ":" "region" type "," int_const ("=" "[" value ("," value)* "]")?
+    global_decl : global_ident ":" "region" type "," int_const ("=" "[" value ("," value)* "]")?
     
-    fun_defn : "fn" ident "(" plist ")" "->" type body
+    fun_defn : "fn" global_ident "(" plist ")" "->" type body
     
-    fun_decl : "fn" ident "(" plist ")" "->" type ";"
+    fun_decl : "fn" global_ident "(" plist ")" "->" type ";"
     
     program : (global_decl | fun_defn | fun_decl)*
 

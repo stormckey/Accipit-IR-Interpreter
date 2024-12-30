@@ -64,7 +64,7 @@ def test_let():
     
 def test_plist():
     parser = Lark(accipit_grammar, parser="lalr", transformer=accipit_transformer, start="plist")
-    parser.parse("#1: i32, %2: i32*")
+    parser.parse("#1: i32, #2: i32*")
     parser.parse("")
     
 def test_label():
