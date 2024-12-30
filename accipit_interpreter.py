@@ -90,8 +90,8 @@ Type = Union[I32, Unit, Pointer, FunType]
 
 class Environment():
     def __init__(self):
-        self.global_env: dict[str, tuple[Type, Any]] = {}
-        self.stack: list[dict[str, tuple[Type, Any]]] = []
+        self.global_env: dict[str, Any] = {}
+        self.stack: list[dict[str, Any]] = []
         
     def push_stack(self):
         self.stack.append({})
@@ -99,25 +99,25 @@ class Environment():
     def pop_stack(self):
         self.stack.pop()
 
-    def add_global(self, name: str, tpe: Type, value: Any):
+    def add_global(self, name: str, value: Any):
         if name in self.global_env:
             raise SemanticError(f"Global identifier {name} is defined twice.")
-        self.global_env[name] = (tpe, value)
+        self.global_env[name] = value
         
     def update_global(self, name: str, value: Any):
         if name not in self.global_env:
             raise SemanticError(f"Global identifier {name} is not defined.")
-        self.global_env[name] = (self.global_env[name][0], value)
+        self.global_env[name] = value
         
-    def add_local(self, name: str, tpe: Type, value: Any):
+    def add_local(self, name: str, value: Any):
         if name in self.stack[-1]:
             raise SemanticError(f"Local identifier {name} is defined twice.")
-        self.stack[-1][name] = (tpe, value)
+        self.stack[-1][name] = value
         
     def update_local(self, name: str, value: Any):
         if name not in self.stack[-1]:
             raise SemanticError(f"Local identifier {name} is not defined.")
-        self.stack[-1][name] = (self.stack[-1][name][0], value)
+        self.stack[-1][name] = value
 
 env = Environment()
 
@@ -271,7 +271,7 @@ class GlobalDecl:
         self.tpe = tpe
         self.size = size
         self.values = values
-        env.add_global(name.__str__(), tpe, self)
+        env.add_global(name.__str__(), self)
         if values and len(values) != size.value:
             raise SemanticError(f"Global array {name} has size {size} but {len(values)} values are provided.")
     
@@ -292,10 +292,19 @@ class FunDefn(IRNode):
         self.params = params
         self.ret = ret
         self.body = body
-        env.add_global(name.__str__(), FunType([param[1] for param in params.params], ret), self)
+        env.add_global(name.__str__(), self)
     
     def __str__(self):
         return f"fn {self.name} ({self.params}) -> {self.ret} {self.body}"
+    
+    def call(self, args: list[Value]) -> tuple[int, int]:
+        return 0, 0
+        # env.push_stack()
+        # for param, arg in zip(self.params.params, args):
+        #     env.add_local(param[0].__str__(), param[1], arg)
+        # return_value, step = self.body.run()
+        # env.pop_stack()
+        # return return_value, step
     
 class FunDecl(IRNode):
     name: Ident
@@ -306,7 +315,7 @@ class FunDecl(IRNode):
         self.name = name
         self.params = params
         self.ret = ret
-        env.add_global(name.__str__(), FunType([param[1] for param in params.params], ret), None)
+        env.add_global(name.__str__(), self)
     
     def __str__(self):
         return f"fn {self.name} ({self.params}) -> {self.ret};"
@@ -441,8 +450,10 @@ def parse(file: str) -> Program:
         exit(1)
         
 def eval(program: Program) -> tuple[int, int]: 
-    step = 0
-    return (0, step)
+    main = env.global_env.get("@main")
+    if main is None or not isinstance(main, FunDefn):
+        raise SemanticError("Main function is not defined.")
+    return main.call([])
 
 if __name__ == "__main__":
     arg_parser = argparse.ArgumentParser(
