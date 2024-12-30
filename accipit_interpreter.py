@@ -1,11 +1,12 @@
 from __future__ import annotations
 from lark import Lark, Transformer, ast_utils, Token, UnexpectedInput
 from dataclasses import dataclass
-from typing import Union
+from typing import Union, Any
 from enum import Enum
 
 import sys
 import argparse
+
 
 @dataclass
 class IRNode(ast_utils.Ast):
@@ -83,6 +84,38 @@ class FunType:
     
 Type = Union[I32, Unit, Pointer, FunType]
 
+class Environment():
+    def __init__(self):
+        self.global_env: dict[str, tuple[Type, Any]] = {}
+        self.stack: list[dict[str, tuple[Type, Any]]] = []
+        
+    def push_stack(self):
+        self.stack.append({})
+
+    def pop_stack(self):
+        self.stack.pop()
+
+    def add_global(self, name: str, tpe: Type, value: Any):
+        if name in self.global_env:
+            raise ValueError(f"Global identifier {name} is defined twice.")
+        self.global_env[name] = (tpe, value)
+        
+    def update_global(self, name: str, value: Any):
+        if name not in self.global_env:
+            raise ValueError(f"Global identifier {name} is not defined.")
+        self.global_env[name] = (self.global_env[name][0], value)
+        
+    def add_local(self, name: str, tpe: Type, value: Any):
+        if name in self.stack[-1]:
+            raise ValueError(f"Local identifier {name} is defined twice.")
+        self.stack[-1][name] = (tpe, value)
+        
+    def update_local(self, name: str, value: Any):
+        if name not in self.stack[-1]:
+            raise ValueError(f"Local identifier {name} is not defined.")
+        self.stack[-1][name] = (self.stack[-1][name][0], value)
+
+env = Environment()
 @dataclass
 class BinExpr(IRNode):
     binop: Token
@@ -222,12 +255,18 @@ class Body:
     def __str__(self):
         return "{" + "\n".join(str(bb) for bb in self.bbs) + "}"
     
-@dataclass
 class GlobalDecl:
     name: Ident
     tpe: Type
     size: IntConst
     values: list[Value]
+    
+    def __init__(self, name: Ident, tpe: Type, size: IntConst, values: list[Value]):
+        self.name = name
+        self.tpe = tpe
+        self.size = size
+        self.values = values
+        env.add_global(name.__str__(), tpe, self)
     
     def __str__(self):
         if self.values:
@@ -235,21 +274,32 @@ class GlobalDecl:
         else:
             return f"{self.name} : {self.tpe}, {self.size}"
         
-@dataclass
 class FunDefn(IRNode):
     name: Ident
     params: PList
     ret: Type
     body: Body
     
+    def __init__(self, name: Ident, params: PList, ret: Type, body: Body):
+        self.name = name
+        self.params = params
+        self.ret = ret
+        self.body = body
+        env.add_global(name.__str__(), FunType([param[1] for param in params.params], ret), self)
+    
     def __str__(self):
         return f"fn {self.name} ({self.params}) -> {self.ret} {self.body}"
     
-@dataclass
 class FunDecl(IRNode):
     name: Ident
     params: PList
     ret: Type
+    
+    def __init__(self, name: Ident, params: PList, ret: Type):
+        self.name = name
+        self.params = params
+        self.ret = ret
+        env.add_global(name.__str__(), FunType([param[1] for param in params.params], ret), None)
     
     def __str__(self):
         return f"fn {self.name} ({self.params}) -> {self.ret};"
@@ -372,45 +422,6 @@ this_module = sys.modules[__name__]
 accipit_transformer = ast_utils.create_transformer(this_module, BaseTransformer())
 parser = Lark(accipit_grammar, parser="lalr", transformer=accipit_transformer)
 
-text = """
-        // a is a global array with 105 i32 elements.
-        // Suppose in SysY it is a multi-dimension array `int a[5][3][7]`
-        @a : region i32, 105
-
-
-        fn @write_global_var(#value: i32) -> () {
-        %entry:
-            // offset: 3 * 3 * 7 + 2 * 7 + 4 = 81
-            let %0 = offset i32, @a, [3 < 5], [2 < 3], [4 < 7]
-            let %1 = store #value, %0
-            // offset based on previous offsets.
-            // offset: 81 + 1 * 3 * 7 + 2 = 104
-            let %2 = offset i32, %0, [1 < 5], [0 < 3], [2 < 7]
-            let %3 = add #value, 1
-            let %4 = store %3, %2
-            ret ()
-        }
-
-        fn @read_global_var(#dim1: i32, #dim2: i32, #dim3: i32) -> i32 {
-        %entry:
-            let %0 = offset i32, @a, [#dim1 < 5], [#dim2 < 3], [#dim3 < 7]
-            let %1 = load %0
-            ret %1
-        }
-
-        fn @main() -> () {
-        %entry:
-            let %0 = call @write_global_var, 10
-            let %1 = call @read_global_var, 3, 2, 4
-            let %2 = call @read_global_var, 4, 2, 6
-            let %3 = call @putint, %1
-            let %4 = call @putch, 10
-            let %5 = call @putint, %2
-            ret ()
-        }
-"""
-step = 0
-
 def parse(file: str) -> Program:
     with open(file) as f:
         text = f.read()
@@ -422,8 +433,9 @@ def parse(file: str) -> Program:
         print(f"Syntax error at position {e.column}: {e}")
         exit(1)
         
-def eval(program: Program) -> int: 
-    return 0
+def eval(program: Program) -> tuple[int, int]: 
+    step = 0
+    return (0, step)
 
 if __name__ == "__main__":
     arg_parser = argparse.ArgumentParser(
@@ -436,7 +448,7 @@ if __name__ == "__main__":
         print("Debug mode on.")
         DEBUG = True
     program = parse(args.file)
-    return_value = eval(program)
+    return_value, step = eval(program)
     # 0 green, else red
     colored_return_value = f"\033[1;32m{return_value}\033[0m" if return_value == 0 else f"\033[1;31m{return_value}\033[0m"
     print(f'Exit with code {colored_return_value} within {step} steps.')
