@@ -1,8 +1,8 @@
 from __future__ import annotations
 from lark import Lark, Transformer, ast_utils, Token, UnexpectedInput
+from lark.ast_utils import Ast
 from dataclasses import dataclass
 from typing import Union, Any
-from enum import Enum
 
 import sys
 import argparse
@@ -14,7 +14,7 @@ class SemanticError(Exception):
 STEP = 0
 DEBUG = False
 
-class IRNode(ast_utils.Ast):
+class IRNode():
     def method_wrapper(self, func):
         def wrapper(*args, **kwargs):
             global STEP
@@ -35,10 +35,10 @@ class IRNode(ast_utils.Ast):
         return obj
 
     def __str__(self):
-        return self.__class__.__name__ + " " + "".join(f"({attr})" for attr in self.__dict__.values())
+        return self.__class__.__name__ + " " + " ".join(f"({attr})" for attr in self.__dict__.values()) + " "
 
 @dataclass
-class IntConst(IRNode):
+class IntConst(Ast):
     value: int
     
     def eval(self) -> int:
@@ -55,7 +55,7 @@ class UnitConst():
         return self
     
 @dataclass 
-class Ident:
+class Ident(IRNode):
     name: str
     
     def __str__(self):
@@ -66,20 +66,20 @@ class Ident:
     
 Value = Union[IntConst, NoneConst, UnitConst, Ident]
 
-@dataclass
 class I32(IRNode):
-    _name: Token
+    def __str__(self):
+        return "i32"
 
-@dataclass
 class Unit(IRNode):
-    _name: Token
+    def __str__(self):
+        return "()"
     
 @dataclass
-class Pointer:
+class Pointer(IRNode):
     name: str
 
 @dataclass
-class FunType:
+class FunType(IRNode):
     params: list[Token]
     ret: Token
     
@@ -89,7 +89,7 @@ class FunType:
 Type = Union[I32, Unit, Pointer, FunType]
 
 @dataclass
-class Ptr:
+class Ptr(IRNode):
     addr: int
 
 class Environment():
@@ -159,7 +159,7 @@ class Environment():
 env = Environment()
 
 @dataclass
-class BinExpr(IRNode):
+class BinExpr(IRNode, Ast):
     binop: Token
     v1: Value
     v2: Value
@@ -199,7 +199,7 @@ class BinExpr(IRNode):
             raise SemanticError(f"Unknown binop {self.binop}")
     
 @dataclass
-class Alloca(IRNode):
+class Alloca(IRNode, Ast):
     tpe: Type
     size: IntConst
     
@@ -208,14 +208,14 @@ class Alloca(IRNode):
 
     
 @dataclass
-class Load(IRNode):
+class Load(IRNode, Ast):
     name: Ident
     
     def eval(self):
         return env.load(self.name)
 
 @dataclass
-class Store(IRNode):
+class Store(IRNode, Ast):
     value: Value
     name: Ident
     
@@ -223,7 +223,7 @@ class Store(IRNode):
         env.store(self.name, self.value.eval())
 
 @dataclass
-class Gep:
+class Gep(IRNode):
     tpe: Type
     name: Ident
     offsets: list[tuple[IntConst, Union[IntConst, NoneConst]]]
@@ -239,7 +239,7 @@ class Gep:
         return Ptr(addr)
     
 @dataclass
-class Fncall:
+class Fncall(IRNode):
     name: Ident
     args: list[Value]
 
@@ -260,7 +260,7 @@ class Fncall:
 ValueBindingOp = Union[BinExpr, Gep, Fncall, Alloca, Load, Store]
 
 @dataclass
-class ValueBindingUntyped(IRNode):
+class ValueBindingUntyped(IRNode, Ast):
     name: Ident
     op: ValueBindingOp
     
@@ -272,7 +272,7 @@ class ValueBindingUntyped(IRNode):
         env.add_local(self.name, value)
         
 @dataclass
-class ValueBindingTyped(IRNode):
+class ValueBindingTyped(IRNode, Ast):
     name: Ident
     type: Type
     op: ValueBindingOp
@@ -287,7 +287,7 @@ class ValueBindingTyped(IRNode):
 ValueBinding = Union[ValueBindingUntyped, ValueBindingTyped]
 
 @dataclass
-class Br(IRNode):
+class Br(IRNode, Ast):
     cond: Value
     label1: Ident
     label2: Ident
@@ -297,7 +297,7 @@ class Br(IRNode):
         return env.get(target).eval()
     
 @dataclass
-class Jmp(IRNode):
+class Jmp(IRNode, Ast):
     label: Ident
     
     def eval(self) -> BasicBlock:
@@ -305,7 +305,6 @@ class Jmp(IRNode):
 
 @dataclass
 class Ret(IRNode):
-    _keyword: Token
     value: Value
     
     def eval(self) -> Value:
@@ -315,8 +314,11 @@ Terminator = Union[Br, Jmp, Ret]
 
 
 @dataclass
-class PList:
+class PList(IRNode):
     params: list[tuple[Ident, Type]]
+    
+    def __str__(self):
+        return ", ".join(f"{name}: {tpe}" for name, tpe in self.params)
     
     def eval(self, values: list[Value]):
         values = [value.eval() for value in values]
@@ -325,7 +327,7 @@ class PList:
             env.add_local(name, value)
     
 @dataclass
-class BasicBlock:
+class BasicBlock(IRNode):
     label: Ident
     bindings: list[ValueBinding]
     terminator: Terminator
@@ -339,7 +341,7 @@ class BasicBlock:
         return self.terminator.eval()
     
 @dataclass
-class Body:
+class Body(IRNode):
     bbs: list[BasicBlock]
     
     def __str__(self):
@@ -370,7 +372,7 @@ class GlobalDecl:
         else:
             return f"{self.name} : {self.tpe}, {self.size}"
         
-class FunDefn(IRNode):
+class FunDefn(IRNode, Ast):
     name: Ident
     params: PList
     ret: Type
@@ -395,7 +397,7 @@ class FunDefn(IRNode):
         return return_value
     
     
-class FunDecl(IRNode):
+class FunDecl(IRNode, Ast):
     name: Ident
     params: PList
     ret: Type
@@ -412,7 +414,7 @@ class FunDecl(IRNode):
 Decl = Union[GlobalDecl, FunDefn, FunDecl]
 
 @dataclass
-class Program:
+class Program():
     decls: list[Decl]
     
     def __str__(self):
@@ -421,6 +423,9 @@ class Program:
 class BaseTransformer(Transformer):
     # start = lambda _, children: children
     name = lambda _, children: "".join(children)
+    
+    i32 = lambda _, _token: I32()
+    unit = lambda _, _token: Unit()
     
     int_const = lambda _, n: IntConst(int(n[0]))
     none_const = lambda _, _token: NoneConst()
@@ -438,6 +443,8 @@ class BaseTransformer(Transformer):
     gep = lambda _, items: Gep(items[0], items[1], [(items[i], items[i+1]) for i in range(2, len(items), 2)])
     
     fncall = lambda _, items: Fncall(items[0], items[1:])
+    
+    ret = lambda _, items: Ret(items[1])
     
     plist = lambda _, items: PList([(items[i], items[i+1]) for i in range(0, len(items), 2)])
     
