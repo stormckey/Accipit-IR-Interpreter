@@ -437,15 +437,15 @@ accipit_grammar = """
     | /%/ (name | INT) 
 
     int_const : SIGNED_INT -> int_const
-    none_const : /none/
-    unit_const : /\(\)/
+    none_const : "none"
+    unit_const : "()"
     ?const : int_const | none_const | unit_const
 
     ?value : ident | const
     
     type : /i32/ -> i32
-    | /\(\)/ -> unit
-    | type /\*/ -> pointer
+    | "()" -> unit
+    | type "*" -> pointer
     | "fn" "(" (type ("," type)*)? ")" "->"  type -> function_type
     
     value_binding_untyped : "let" ident "=" (bin_expr | gep | fncall | alloca | load | store)
