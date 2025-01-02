@@ -278,7 +278,7 @@ class Br(IRNode, Ast):
     label1: Ident
     label2: Ident
     
-    def eval(self) -> BasicBlock:
+    def eval(self) -> int:
         target = self.label1 if self.cond.eval() else self.label2
         return env.get(target).eval()
     
@@ -286,12 +286,12 @@ class Br(IRNode, Ast):
 class Jmp(IRNode, Ast):
     label: Ident
     
-    def eval(self) -> BasicBlock:
+    def eval(self) -> int:
         return env.get(self.label).eval()
 
 @dataclass
 class Ret(IRNode):
-    value: Value
+    value: IntConst | Ident | UnitConst
     
     def eval(self) -> Value:
         return self.value.eval()
@@ -306,7 +306,7 @@ class PList(IRNode):
     def __str__(self):
         return ", ".join(f"{name}: {tpe}" for name, tpe in self.params)
     
-    def eval(self, values: list[Value]):
+    def eval(self, values: list[Ident | IntConst]):
         values = [value.eval() for value in values]
         env.push_frame()
         for (name, _), value in zip(self.params, values):
@@ -321,7 +321,7 @@ class BasicBlock(IRNode):
     def __str__(self):
         return f"{self.label}:\n" + "\n".join(str(binding) for binding in self.bindings) + f"\n{self.terminator}"
     
-    def eval(self) -> int:
+    def eval(self) -> int | UnitConst:
         for binding in self.bindings:
             binding.eval()
         return self.terminator.eval()
@@ -340,9 +340,9 @@ class GlobalDecl:
     name: Ident
     tpe: Type
     size: IntConst
-    values: list[Value]
+    values: list[IntConst]
     
-    def __init__(self, name: Ident, tpe: Type, size: IntConst, values: list[Value]):
+    def __init__(self, name: Ident, tpe: Type, size: IntConst, values: list[IntConst]):
         self.name = name
         self.tpe = tpe
         self.size = size
@@ -494,8 +494,8 @@ def parse(file: str) -> Program:
     with open(file) as f:
         text = f.read()
     try:
-        parsed_result = parser.parse(text)
-        return parsed_result
+        result: Program = parser.parse(text)
+        return result
     except UnexpectedInput as e:
         print(e.get_context(text))
         print(f"Syntax error at position {e.column}: {e}")
