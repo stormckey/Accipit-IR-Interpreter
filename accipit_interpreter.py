@@ -163,8 +163,8 @@ env = Environment()
 @dataclass
 class BinExpr(IRNode, Ast):
     binop: Token
-    v1: Value
-    v2: Value
+    v1: IntConst | Ident
+    v2: IntConst | Ident
     
     def eval(self):
         v1 = self.v1.eval()
@@ -208,7 +208,6 @@ class Alloca(IRNode, Ast):
     def eval(self) -> Ptr:
         return env.allocate(self.size.eval())
 
-    
 @dataclass
 class Load(IRNode, Ast):
     name: Ident
@@ -218,7 +217,7 @@ class Load(IRNode, Ast):
 
 @dataclass
 class Store(IRNode, Ast):
-    value: Value
+    value: Ident
     name: Ident
     
     def eval(self):
@@ -408,42 +407,27 @@ class Program():
         return "\n".join(str(decl) for decl in self.decls)
 
 class BaseTransformer(Transformer):
-    # start = lambda _, children: children
     name = lambda _, children: "".join(children)
-    
     i32 = lambda _, _token: I32()
     unit = lambda _, _token: Unit()
-    
     int_const = lambda _, n: IntConst(int(n[0]))
     none_const = lambda _, _token: NoneConst()
     unit_const = lambda _, _token: UnitConst()
-    
     SIGNED_INT = lambda _, n: int(n)
-
     function_type = lambda _, items: FunType(items[:-1], items[-1])
     pointer = lambda _, items: Pointer(items[0].__str__() + "*")
-    
     global_ident = lambda _, items: Ident("@" + items[0])
     param_ident = lambda _, items: Ident("#" + items[0])
     local_ident = lambda _, items: Ident("%" + items[0])
-    
     gep = lambda _, items: Gep(items[0], items[1], [(items[i], items[i+1]) for i in range(2, len(items), 2)])
-    
     fncall = lambda _, items: Fncall(items[0], items[1:])
-    
     value_binding_untyped = lambda _, items: ValueBinding(items[0], items[1])
     value_binding_typed = lambda _, items: ValueBinding(items[0], items[2])
-    
     ret = lambda _, items: Ret(items[1])
-    
     plist = lambda _, items: PList([(items[i], items[i+1]) for i in range(0, len(items), 2)])
-    
     bb = lambda _, items: BasicBlock(items[0], items[1:-1], items[-1])
-    
     body = lambda _, items: Body(items)
-    
     global_decl = lambda _, items: GlobalDecl(items[0], items[1], items[2], items[3:])
-    
     program = lambda _, items: Program(items)
 
 accipit_grammar = """
@@ -475,18 +459,12 @@ accipit_grammar = """
     ?value_binding : value_binding_untyped | value_binding_typed
     ?terminator : br | jmp | ret
     
-    bin_expr : binop value "," value
-
     ?binop : /add/ | /sub/ | /mul/ | /div/ | /rem/ | /and/ | /or/ | /xor/ | /eq/ | /ne/ | /lt/ | /le/ | /gt/ | /ge/
-    
+    bin_expr : binop value "," value
     alloca : "alloca" type "," int_const
-    
     load : "load" ident
-    
     store : "store" value "," ident 
-
     gep : "offset" type "," ident ( "," "[" value "<" (int_const | none_const) "]" )+
-    
     fncall : "call" global_ident ("," value)*
     
     br : "br" value "," "label" local_ident "," "label" local_ident
@@ -496,20 +474,15 @@ accipit_grammar = """
     ?plist : (param_ident ":" type ("," param_ident ":" type)*)?
     
     ?label : local_ident ":"
-    
     ?bb : label (value_binding| terminator)*
-    
     body : "{" bb* "}"
     
     global_decl : global_ident ":" "region" type "," int_const ("=" "[" value ("," value)* "]")?
-    
     fun_defn : "fn" global_ident "(" plist ")" "->" type body
-    
     fun_decl : "fn" global_ident "(" plist ")" "->" type ";"
-    
     program : (global_decl | fun_defn | fun_decl)*
 
-   %import common.WS
+    %import common.WS
     %import common.CPP_COMMENT
     %import common.C_COMMENT
     %import common.INT
