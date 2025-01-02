@@ -416,9 +416,7 @@ class BaseTransformer(Transformer):
     SIGNED_INT = lambda _, n: int(n)
     function_type = lambda _, items: FunType(items[:-1], items[-1])
     pointer = lambda _, items: Pointer(items[0].__str__() + "*")
-    global_ident = lambda _, items: Ident("@" + items[0])
-    param_ident = lambda _, items: Ident("#" + items[0])
-    local_ident = lambda _, items: Ident("%" + items[0])
+    ident = lambda _, items: Ident(items[0] + items[1])
     gep = lambda _, items: Gep(items[0], items[1], [(items[i], items[i+1]) for i in range(2, len(items), 2)])
     fncall = lambda _, items: Fncall(items[0], items[1:])
     value_binding_untyped = lambda _, items: ValueBinding(items[0], items[1])
@@ -435,10 +433,9 @@ accipit_grammar = """
 
     name : /[a-zA-Z.-_]/ /[a-zA-Z0-9.-_]/*
 
-    global_ident : "@" (name | INT)
-    param_ident : "#" (name | INT)
-    local_ident : "%" (name | INT)
-    ?ident : global_ident | param_ident | local_ident
+    ident : /@/ (name | INT)
+    | /#/ (name | INT)
+    | /%/ (name | INT) 
 
     int_const : SIGNED_INT -> int_const
     none_const : /none/
@@ -465,21 +462,21 @@ accipit_grammar = """
     load : "load" ident
     store : "store" value "," ident 
     gep : "offset" type "," ident ( "," "[" value "<" (int_const | none_const) "]" )+
-    fncall : "call" global_ident ("," value)*
+    fncall : "call" ident ("," value)*
     
-    br : "br" value "," "label" local_ident "," "label" local_ident
-    jmp : "jmp" "label" local_ident
+    br : "br" value "," "label" ident "," "label" ident
+    jmp : "jmp" "label" ident
     ret : /(?<!\w)ret(?!\w)/ value
     
-    ?plist : (param_ident ":" type ("," param_ident ":" type)*)?
+    ?plist : (ident ":" type ("," ident ":" type)*)?
     
-    ?label : local_ident ":"
+    ?label : ident ":"
     ?bb : label (value_binding| terminator)*
     body : "{" bb* "}"
     
-    global_decl : global_ident ":" "region" type "," int_const ("=" "[" value ("," value)* "]")?
-    fun_defn : "fn" global_ident "(" plist ")" "->" type body
-    fun_decl : "fn" global_ident "(" plist ")" "->" type ";"
+    global_decl : ident ":" "region" type "," int_const ("=" "[" value ("," value)* "]")?
+    fun_defn : "fn" ident "(" plist ")" "->" type body
+    fun_decl : "fn" ident "(" plist ")" "->" type ";"
     program : (global_decl | fun_defn | fun_decl)*
 
     %import common.WS
