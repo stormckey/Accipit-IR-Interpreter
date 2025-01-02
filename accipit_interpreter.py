@@ -432,7 +432,6 @@ accipit_grammar = """
     ?start : program
 
     name : /[a-zA-Z.-_]/ /[a-zA-Z0-9.-_]/*
-
     ident : /@/ (name | INT)
     | /#/ (name | INT)
     | /%/ (name | INT) 
@@ -440,9 +439,7 @@ accipit_grammar = """
     int_const : SIGNED_INT -> int_const
     none_const : /none/
     unit_const : /\(\)/
-    ?const : int_const
-    | none_const
-    | unit_const
+    ?const : int_const | none_const | unit_const
 
     ?value : ident | const
     
@@ -469,7 +466,6 @@ accipit_grammar = """
     ret : /(?<!\w)ret(?!\w)/ value
     
     ?plist : (ident ":" type ("," ident ":" type)*)?
-    
     ?label : ident ":"
     ?bb : label (value_binding| terminator)*
     body : "{" bb* "}"
