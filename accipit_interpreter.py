@@ -60,18 +60,12 @@ class UnitConst():
     def eval(self) -> UnitConst:
         return self
     
-class Region(Enum):
-    GLOBAL = "@"
-    PARAM = "#"
-    LOCAL = "%"
-    
 @dataclass 
 class Ident:
-    region: Region 
     name: str
 
     def __str__(self):
-        return self.region.value + self.name
+        return self.name
     
     def eval(self) -> Any:
         return env.get(self)
@@ -156,7 +150,7 @@ class Environment():
         return self.frames[-1].get(name.__str__())
         
     def get(self, name: Ident) -> Any:
-        if name.region == Region.GLOBAL:
+        if name.name.startswith("@"):
             return self.get_global(name)
         else:
             return self.get_local(name)
@@ -476,9 +470,9 @@ class BaseTransformer(Transformer):
     function_type = lambda _, items: FunType(items[:-1], items[-1])
     pointer = lambda _, items: Pointer(items[0].__str__() + "*")
     
-    global_ident = lambda _, items: Ident(Region.GLOBAL, items[0])
-    param_ident = lambda _, items: Ident(Region.PARAM, items[0])
-    local_ident = lambda _, items: Ident(Region.LOCAL, items[0])
+    global_ident = lambda _, items: Ident("@" + items[0])
+    param_ident = lambda _, items: Ident("#" + items[0])
+    local_ident = lambda _, items: Ident("%" + items[0])
     
     gep = lambda _, items: Gep(items[0], items[1], [(items[i], items[i+1]) for i in range(2, len(items), 2)])
     
