@@ -10,11 +10,29 @@ import argparse
 class SemanticError(Exception):
     def __init__(self, message):
         super().__init__(message)
+        
+STEP = 0
+DEBUG = False
 
-@dataclass
 class IRNode(ast_utils.Ast):
-    def __str__(self) -> str:
-        raise NotImplementedError("IRNode.__str__() is not implemented.")
+    def method_wrapper(self, func):
+        def wrapper(*args, **kwargs):
+            global STEP
+            step = STEP
+            STEP = STEP + 1
+            name = self.__str__().split('\n')[0]
+            print(f"[STEP {step}.evaluating {name} with args={args}]")
+            result = func(*args, **kwargs)
+            print(f"[STEP {step}.returned {result}]")
+            return result
+        return wrapper
+    
+    def __getattribute__(self, name):
+        # This intercepts the access to methods and wraps them if they are callable
+        obj = super().__getattribute__(name)
+        if DEBUG and callable(obj) and name == "eval":
+            return self.method_wrapper(obj)  # Wrap the method
+        return obj
 
 @dataclass
 class IntConst(IRNode):
@@ -280,7 +298,7 @@ class ValueBindingUntyped(IRNode):
     op: ValueBindingOp
     
     def __str__(self):
-        return f"let {self.name} = {self.op}"
+        return f"\tlet {self.name} = {self.op}"
     
     def eval(self):
         value = self.op.eval()
@@ -293,7 +311,7 @@ class ValueBindingTyped(IRNode):
     op: ValueBindingOp
     
     def __str__(self):
-        return f"let {self.name}: {self.type} = {self.op}"
+        return f"\tlet {self.name}: {self.type} = {self.op}"
     
     def eval(self):
         value = self.op.eval()
@@ -308,7 +326,7 @@ class Br(IRNode):
     label2: Ident
     
     def __str__(self):
-        return f"br {self.cond}, label {self.label1}, label {self.label2}"
+        return f"\tbr {self.cond}, label {self.label1}, label {self.label2}"
     
     def eval(self) -> BasicBlock:
         target = self.label1 if self.cond.eval() else self.label2
@@ -319,7 +337,7 @@ class Jmp(IRNode):
     label: Ident
     
     def __str__(self):
-        return f"jmp label {self.label}"
+        return f"\tjmp label {self.label}"
     
     def eval(self) -> BasicBlock:
         return env.get(self.label).eval()
@@ -330,7 +348,7 @@ class Ret(IRNode):
     value: Value
     
     def __str__(self):
-        return f"ret {self.value}"
+        return f"\tret {self.value}"
     
     def eval(self) -> Value:
         return self.value.eval()
@@ -370,7 +388,7 @@ class Body:
     bbs: list[BasicBlock]
     
     def __str__(self):
-        return "{" + "\n".join(str(bb) for bb in self.bbs) + "}"
+        return "{\n" + "\n".join(str(bb) for bb in self.bbs) + "\n}"
     
     def eval(self) -> int:
         return self.bbs[0].eval()
@@ -477,7 +495,7 @@ class BaseTransformer(Transformer):
     program = lambda _, items: Program(items)
 
 accipit_grammar = """
-    start : program
+    ?start : program
 
     name : /[a-zA-Z.-_]/ /[a-zA-Z0-9.-_]/*
 
@@ -578,10 +596,11 @@ if __name__ == "__main__":
     arg_parser.add_argument("-d", "--debug", action="store_true",
                             help="Whether to print debug info.")
     args = arg_parser.parse_args()
-    if args.debug:
-        print("Debug mode on.")
-        DEBUG = True
     program = parse(args.file)
+    if args.debug:
+        DEBUG = True
+        print("Debug mode on.")
+        print(f"The parsed AST is:\n{program}")
     return_value = eval()
     colored_return_value = f"\033[1;32m{return_value}\033[0m" if return_value == 0 else f"\033[1;31m{return_value}\033[0m"
     print(f'Exit with code {colored_return_value}.')
