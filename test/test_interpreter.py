@@ -333,3 +333,24 @@ def test_eval_3():
     """
     answer = "120\n"
     helper_test_with_text(text, answer)
+    
+def test_call_by_value():
+    text = """
+    fn @put(#a: i32, #b: i32*) -> () {
+    %Lentry:
+        let %0 = call @write, #a
+        let %1 = store 2, #b
+        let %2 = call @write, #a
+        ret ()
+    }
+    fn @main() -> i32 {
+    %Lentry:
+        let %b = alloca i32, 1
+        let %0 = store 1, %b
+        let %a = load %b
+        let %1 = call @put, %a, %b
+        ret 0
+    }
+    """
+    answer = "1\n1\n"
+    helper_test_with_text(text, answer) 
