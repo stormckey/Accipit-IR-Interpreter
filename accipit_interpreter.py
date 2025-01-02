@@ -7,19 +7,12 @@ from enum import Enum
 import sys
 import argparse
 
-STEP = 0
-
 class SemanticError(Exception):
     def __init__(self, message):
-        self.message = message
-        super().__init__(self.message)
+        super().__init__(message)
 
 @dataclass
 class IRNode(ast_utils.Ast):
-    """
-    IRNode is the base class for all IR nodes.
-    """
-
     def __str__(self) -> str:
         raise NotImplementedError("IRNode.__str__() is not implemented.")
 
@@ -30,19 +23,24 @@ class IntConst(IRNode):
     def __str__(self):
         return str(self.value)
     
-@dataclass
-class NoneConst(IRNode):
-    name: Token
+    def eval(self) -> int:
+        return self.value
     
+@dataclass
+class NoneConst():
     def __str__(self):
         return "none"
     
-@dataclass
-class UnitConst(IRNode):
-    name: Token
+    def eval(self):
+        return 1
     
+@dataclass
+class UnitConst():
     def __str__(self):
         return "()"
+    
+    def eval(self) -> UnitConst:
+        return self
     
 class Region(Enum):
     GLOBAL = "@"
@@ -56,6 +54,9 @@ class Ident:
 
     def __str__(self):
         return self.region.value + self.name
+    
+    def eval(self) -> Any:
+        return env.get(self)
     
 Value = Union[IntConst, NoneConst, UnitConst, Ident]
 
@@ -90,40 +91,73 @@ class FunType:
     
 Type = Union[I32, Unit, Pointer, FunType]
 
+@dataclass
+class Ptr:
+    addr: int
+
 class Environment():
     def __init__(self):
         self.global_env: dict[str, Any] = {}
-        self.stack: list[dict[str, Any]] = []
+        self.frames: list[dict[str, Any]] = []
+        self.stack: list[int] = [0]*1024
+        self.capacity: int = 1024
+        self.size: int = 0
         
     def push_stack(self):
-        self.stack.append({})
+        self.frames.append({})
 
     def pop_stack(self):
-        self.stack.pop()
+        self.frames.pop()
+        
+    def allocate(self, size: int, init: list[int] = []) -> Ptr:
+        if self.size + size > self.capacity:
+            size_lacked = self.size + size - self.capacity
+            size_to_extend = (size_lacked + 1023) // 1024 * 1024
+            self.stack.extend([0] * size_to_extend)
+            self.capacity += size_to_extend
+        addr = self.size
+        self.size += size
+        if init:
+            self.stack[addr:addr+size] = init
+        return Ptr(addr)
 
-    def add_global(self, name: str, value: Any):
+    def add_global(self, name, value: Any):
+        name = name.__str__()
         if name in self.global_env:
             raise SemanticError(f"Global identifier {name} is defined twice.")
         self.global_env[name] = value
         
-    def update_global(self, name: str, value: Any):
-        if name not in self.global_env:
-            raise SemanticError(f"Global identifier {name} is not defined.")
-        self.global_env[name] = value
+    def get_global(self, name) -> Any:
+        return self.global_env.get(name.__str__())
         
-    def add_local(self, name: str, value: Any):
-        if name in self.stack[-1]:
-            raise SemanticError(f"Local identifier {name} is defined twice.")
-        self.stack[-1][name] = value
+    def add_local(self, name, value: Any):
+        name = name.__str__()
+        self.frames[-1][name] = value
         
-    def update_local(self, name: str, value: Any):
-        if name not in self.stack[-1]:
-            raise SemanticError(f"Local identifier {name} is not defined.")
-        self.stack[-1][name] = value
+    def get_local(self, name) -> Any:
+        return self.frames[-1].get(name.__str__())
+        
+    def get(self, name: Ident) -> Any:
+        if name.region == Region.GLOBAL:
+            return self.get_global(name)
+        else:
+            return self.get_local(name)
+        
+    def store(self, name: Ident, value: int):
+        ptr = self.get(name)
+        if not isinstance(ptr, Ptr):
+            raise SemanticError(f"{name} is not a pointer.")
+        self.stack[ptr.addr] = value
+        
+    def load(self, name: Ident) -> int:
+        ptr = self.get(name)
+        if not isinstance(ptr, Ptr):
+            raise SemanticError(f"{name} is not a pointer.")
+        return self.stack[ptr.addr]
         
     def clear(self):
         self.global_env.clear()
-        self.stack.clear()
+        self.frames.clear()
 
 env = Environment()
 
@@ -136,25 +170,40 @@ class BinExpr(IRNode):
     def __str__(self):
         return f"{self.binop} {self.v1}, {self.v2}"
     
-class Binop(Enum):
-    Add = "add"
-    Sub = "sub"
-    Mul = "mul"
-    Div = "div"
-    Rem = "rem"
-    And = "and"
-    Or = "or"
-    Xor = "xor"
-    Eq = "eq"
-    Ne = "ne"
-    Lt = "lt"
-    Le = "le"
-    Gt = "gt"
-    Ge = "ge"
+    def eval(self):
+        v1 = self.v1.eval()
+        v2 = self.v2.eval()
+        if self.binop == "add":
+            return v1 + v2
+        elif self.binop == "sub":
+            return v1 - v2
+        elif self.binop == "mul":
+            return v1 * v2
+        elif self.binop == "div":
+            return v1 // v2
+        elif self.binop == "rem":
+            return v1 % v2
+        elif self.binop == "and":
+            return v1 & v2
+        elif self.binop == "or":
+            return v1 | v2
+        elif self.binop == "xor":
+            return v1 ^ v2
+        elif self.binop == "eq":
+            return v1 == v2
+        elif self.binop == "ne":
+            return v1 != v2
+        elif self.binop == "lt":
+            return v1 < v2
+        elif self.binop == "le":
+            return v1 <= v2
+        elif self.binop == "gt":
+            return v1 > v2
+        elif self.binop == "ge":
+            return v1 >= v2
+        else:
+            raise SemanticError(f"Unknown binop {self.binop}")
     
-def str2binop(s: str) -> Binop:
-    return Binop[s.capitalize()]
-
 @dataclass
 class Alloca(IRNode):
     tpe: Type
@@ -162,6 +211,10 @@ class Alloca(IRNode):
     
     def __str__(self):
         return f"alloca {self.tpe}, {self.size}"
+
+    def eval(self) -> Ptr:
+        return env.allocate(self.size.eval())
+
     
 @dataclass
 class Load(IRNode):
@@ -169,6 +222,9 @@ class Load(IRNode):
     
     def __str__(self):
         return f"load {self.name}"
+    
+    def eval(self):
+        return env.load(self.name)
 
 @dataclass
 class Store(IRNode):
@@ -177,16 +233,25 @@ class Store(IRNode):
     
     def __str__(self):
         return f"store {self.value}, {self.name}"
+    
+    def eval(self):
+        env.store(self.name, self.value.eval())
 
 @dataclass
 class Gep:
     tpe: Type
     name: Ident
-    offsets: list[tuple[int, int]]
-    
+    offsets: list[tuple[IntConst, Union[IntConst, NoneConst]]]
+
     def __str__(self):
         indexing = ", ".join(f"{idx} < {dim}" for idx, dim in self.offsets)
         return f"offset {self.tpe}, {self.name}, {indexing}"
+    
+    def eval(self) -> Ptr:
+        addr = env.get(self.name).addr
+        for idx, dim in self.offsets:
+            addr = addr * dim.eval() + idx.eval()
+        return Ptr(addr)
     
 @dataclass
 class Fncall:
@@ -194,8 +259,19 @@ class Fncall:
     args: list[Value]
 
     def __str__(self):
-        return f"call {self.name} ({', '.join(str(arg) for arg in self.args)}"
+        return f"call {self.name} ({', '.join(str(arg) for arg in self.args)})"
     
+    def eval(self):
+        if self.name.__str__() == "@write":
+            print(self.args[0].eval())
+            return 0
+        elif self.name.__str__() == "@read":
+            return int(input())
+        fun = env.get_global(self.name)
+        if not isinstance(fun, FunDefn) and not isinstance(fun, FunDecl):
+            raise SemanticError(f"{self.name} is not a function.") 
+        return fun.eval(self.args)
+
 ValueBindingOp = Union[BinExpr, Gep, Fncall, Alloca, Load, Store]
 
 @dataclass
@@ -206,6 +282,10 @@ class ValueBindingUntyped(IRNode):
     def __str__(self):
         return f"let {self.name} = {self.op}"
     
+    def eval(self):
+        value = self.op.eval()
+        env.add_local(self.name, value)
+        
 @dataclass
 class ValueBindingTyped(IRNode):
     name: Ident
@@ -214,6 +294,10 @@ class ValueBindingTyped(IRNode):
     
     def __str__(self):
         return f"let {self.name}: {self.type} = {self.op}"
+    
+    def eval(self):
+        value = self.op.eval()
+        env.add_local(self.name, value)
     
 ValueBinding = Union[ValueBindingUntyped, ValueBindingTyped]
 
@@ -226,12 +310,19 @@ class Br(IRNode):
     def __str__(self):
         return f"br {self.cond}, label {self.label1}, label {self.label2}"
     
+    def eval(self) -> BasicBlock:
+        target = self.label1 if self.cond.eval() else self.label2
+        return env.get(target).eval()
+    
 @dataclass
 class Jmp(IRNode):
     label: Ident
     
     def __str__(self):
         return f"jmp label {self.label}"
+    
+    def eval(self) -> BasicBlock:
+        return env.get(self.label).eval()
 
 @dataclass
 class Ret(IRNode):
@@ -241,7 +332,11 @@ class Ret(IRNode):
     def __str__(self):
         return f"ret {self.value}"
     
+    def eval(self) -> Value:
+        return self.value.eval()
+    
 Terminator = Union[Br, Jmp, Ret]
+
 
 @dataclass
 class PList:
@@ -250,6 +345,12 @@ class PList:
     def __str__(self):
         return ", ".join(f"{name} : {tpe}" for name, tpe in self.params)
     
+    def eval(self, values: list[Value]):
+        values = [value.eval() for value in values]
+        env.push_stack()
+        for (name, _), value in zip(self.params, values):
+            env.add_local(name, value)
+    
 @dataclass
 class BasicBlock:
     label: Ident
@@ -257,7 +358,12 @@ class BasicBlock:
     terminator: Terminator
     
     def __str__(self):
-        return f"{self.label}:\n" + "\n".join(str(binding) for binding in self.bindings) + "\n{self.terminator}"
+        return f"{self.label}:\n" + "\n".join(str(binding) for binding in self.bindings) + f"\n{self.terminator}"
+    
+    def eval(self) -> int:
+        for binding in self.bindings:
+            binding.eval()
+        return self.terminator.eval()
     
 @dataclass
 class Body:
@@ -266,17 +372,8 @@ class Body:
     def __str__(self):
         return "{" + "\n".join(str(bb) for bb in self.bbs) + "}"
     
-    def run(self) -> int:
-        for binding in self.bbs[0].bindings:
-            print(binding)
-            match binding:
-                case ValueBindingUntyped(name, op):
-                    print("untyped")
-                    env.add_local(name.__str__(), op)
-                case ValueBindingTyped(name, _, op):
-                    print("typed")
-                    env.add_local(name.__str__(), op)
-        return 0
+    def eval(self) -> int:
+        return self.bbs[0].eval()
     
 class GlobalDecl:
     name: Ident
@@ -289,9 +386,10 @@ class GlobalDecl:
         self.tpe = tpe
         self.size = size
         self.values = values
-        env.add_global(name.__str__(), self)
-        if values and len(values) != size.value:
+        if values and len(values) != size.eval():
             raise SemanticError(f"Global array {name} has size {size} but {len(values)} values are provided.")
+        ptr = env.allocate(size.eval(), [value.eval() for value in values])
+        env.add_global(name, ptr)
     
     def __str__(self):
         if self.values:
@@ -301,27 +399,28 @@ class GlobalDecl:
         
 class FunDefn(IRNode):
     name: Ident
-    params: list[tuple[Ident, Type]]
+    params: PList
     ret: Type
     body: Body
     
     def __init__(self, name: Ident, params: PList, ret: Type, body: Body):
         self.name = name
-        self.params = params.params
+        self.params = params
         self.ret = ret
         self.body = body
-        env.add_global(name.__str__(), self)
+        env.add_global(name, self)
     
     def __str__(self):
         return f"fn {self.name} ({self.params}) -> {self.ret} {self.body}"
     
-    def call(self, args: list[Value]) -> int:
-        env.push_stack()
-        for param, arg in zip(self.params, args):
-            env.add_local(param[0].__str__(), arg)
-        return_value = self.body.run()
+    def eval(self, args: list[Value]) -> int:
+        self.params.eval(args)
+        for bb in self.body.bbs:
+            env.add_local(bb.label, bb)
+        return_value = self.body.eval()
         env.pop_stack()
         return return_value
+    
     
 class FunDecl(IRNode):
     name: Ident
@@ -332,7 +431,7 @@ class FunDecl(IRNode):
         self.name = name
         self.params = params
         self.ret = ret
-        env.add_global(name.__str__(), self)
+        env.add_global(name, self)
     
     def __str__(self):
         return f"fn {self.name} ({self.params}) -> {self.ret};"
@@ -351,7 +450,8 @@ class BaseTransformer(Transformer):
     name = lambda _, children: "".join(children)
     
     int_const = lambda _, n: IntConst(int(n[0]))
-    none_const = lambda _, n: NoneConst
+    none_const = lambda _, _token: NoneConst()
+    unit_const = lambda _, _token: UnitConst()
     
     SIGNED_INT = lambda _, n: int(n)
 
@@ -361,8 +461,6 @@ class BaseTransformer(Transformer):
     global_ident = lambda _, items: Ident(Region.GLOBAL, items[0])
     param_ident = lambda _, items: Ident(Region.PARAM, items[0])
     local_ident = lambda _, items: Ident(Region.LOCAL, items[0])
-    
-    binop = lambda _, items: str2binop(items[0])
     
     gep = lambda _, items: Gep(items[0], items[1], [(items[i], items[i+1]) for i in range(2, len(items), 2)])
     
@@ -389,10 +487,11 @@ accipit_grammar = """
     ?ident : global_ident | param_ident | local_ident
 
     int_const : SIGNED_INT -> int_const
-    none_const : /none/ -> none_const
+    none_const : /none/
+    unit_const : /\(\)/
     ?const : int_const
     | none_const
-    | /\(\)/ -> unit_const
+    | unit_const
 
     ?value : ident | const
     
@@ -401,14 +500,14 @@ accipit_grammar = """
     | type /\*/ -> pointer
     | "fn" "(" (type ("," type)*)? ")" "->"  type -> function_type
     
-    value_binding_untyped : "let" ident "=" (binexpr | gep | fncall | alloca | load | store)
-    value_binding_typed : "let" ident ":" type "=" (binexpr | gep | fncall | alloca | load | store)
+    value_binding_untyped : "let" ident "=" (bin_expr | gep | fncall | alloca | load | store)
+    value_binding_typed : "let" ident ":" type "=" (bin_expr | gep | fncall | alloca | load | store)
     ?value_binding : value_binding_untyped | value_binding_typed
     ?terminator : br | jmp | ret
     
-    ?binexpr : binop value "," value
+    bin_expr : binop value "," value
 
-    binop : /add/ | /sub/ | /mul/ | /div/ | /rem/ | /and/ | /or/ | /xor/ | /eq/ | /ne/ | /lt/ | /le/ | /gt/ | /ge/
+    ?binop : /add/ | /sub/ | /mul/ | /div/ | /rem/ | /and/ | /or/ | /xor/ | /eq/ | /ne/ | /lt/ | /le/ | /gt/ | /ge/
     
     alloca : "alloca" type "," int_const
     
@@ -466,11 +565,11 @@ def parse(file: str) -> Program:
         print(f"Syntax error at position {e.column}: {e}")
         exit(1)
         
-def eval(program: Program) -> int: 
+def eval() -> int: 
     main = env.global_env.get("@main")
     if main is None or not isinstance(main, FunDefn):
         raise SemanticError("Main function is not defined.")
-    return main.call([])
+    return main.eval([])
 
 if __name__ == "__main__":
     arg_parser = argparse.ArgumentParser(
@@ -483,8 +582,7 @@ if __name__ == "__main__":
         print("Debug mode on.")
         DEBUG = True
     program = parse(args.file)
-    return_value = eval(program)
-    # 0 green, else red
+    return_value = eval()
     colored_return_value = f"\033[1;32m{return_value}\033[0m" if return_value == 0 else f"\033[1;31m{return_value}\033[0m"
-    print(f'Exit with code {colored_return_value} within {STEP} steps.')
+    print(f'Exit with code {colored_return_value}.')
     exit(return_value)

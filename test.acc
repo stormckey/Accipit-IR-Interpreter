@@ -1,20 +1,49 @@
-fn @read_write_array(#array.addr: i32*) -> i32 {
-%entry:
-    let %size = call @getarray, #array.addr
-    let %0 = call @putarray, %size, #array.addr
-    ret %size
-}
-
-fn @main() -> () {
-%0:
-    let %array.addr = alloca i32, 10
-    let %size = call @read_write_array, %array.addr
-    let %1 = call @putch, 10
-    let %2 = call @putint, %size
-    let %3 = call @putch, 10
-    let %index = call @getint
-    let %offset = offset i32, %array.addr, [%index < 10]
-    let %value = load %offset
-    let %4 = call @putint, %value
-    ret ()
-}
+    fn @factorial(#n: i32) -> i32 {
+    %Lentry:
+        // create a stack slot of i32 type as the space of the return value.
+        // if n equals 1, store `1` to this address, i.e. `return 1`,
+        // otherwise, do recursive call, i.e. return n * factorial(n - 1).
+        let %ret.addr = alloca i32, 1
+        // store function parameter on the stack.
+        let %n.addr = alloca i32, 1
+        let %4 = store #n, %n.addr
+        // create a slot for local variable ans, uninitialized.
+        let %ans.addr = alloca i32, 1
+        // when we need #n, you just read it from %n.addr.
+        let %6 = load %n.addr
+        // comparison produce an `i8` value.
+        let %cmp = eq %6, 0
+        br %cmp, label %Ltrue, label %Lfalse
+    %Ltrue:
+        // retuen value = 1.
+        let %10 = store 1, %ret.addr
+        jmp label %Lret
+    %Lfalse:
+        // n - 1
+        let %13 = load %n.addr
+        let %14 = sub %13, 1
+        // factorial(n - 1)
+        let %res = call @factorial, %14
+        // n
+        let %16 = load %n.addr
+        // n * factorial(n - 1)
+        let %17 = mul %16, %res
+        // write local variable `ans`
+        let %18 = store %17, %ans.addr
+        // now we meets `return ans`, which means we
+        // should first read value from `%ans.addr` and then
+        // write it to `%ret.addr`.
+        let %19 = load %ans.addr
+        let %20 = store %19, %ret.addr
+        jmp label %Lret
+    %Lret:
+        // load return value from %ret.addr
+        let %ret.val = load %ret.addr
+        ret %ret.val
+    }
+    fn @main() -> i32 {
+    %Lentry:
+        let %res = call @factorial, 5
+        let %0 = call @write, %res
+        ret 0
+    }
