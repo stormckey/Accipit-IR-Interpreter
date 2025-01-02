@@ -176,7 +176,7 @@ class BinExpr(IRNode, Ast):
         elif self.binop == "mul":
             return v1 * v2
         elif self.binop == "div":
-            return v1 // v2
+            return int(v1 / v2)
         elif self.binop == "rem":
             return v1 % v2
         elif self.binop == "and":
