@@ -1,9 +1,9 @@
 # Accipit IR Interpreter
 
-Dependency: lark
+Dependency: `lark`
 
-To test, install pytest and run `python -m pytest`.
+Usage: `python accipit_interpreter.py [-h] [-d] file`
 
-Usage: python accipit_interpreter.py [-h] [-d] file
+Test: `python -m pytest`
 
 Any suggestion is welcomed!
