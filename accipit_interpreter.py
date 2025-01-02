@@ -260,7 +260,7 @@ class Fncall(IRNode):
 ValueBindingOp = Union[BinExpr, Gep, Fncall, Alloca, Load, Store]
 
 @dataclass
-class ValueBindingUntyped(IRNode, Ast):
+class ValueBinding(IRNode):
     name: Ident
     op: ValueBindingOp
     
@@ -271,21 +271,6 @@ class ValueBindingUntyped(IRNode, Ast):
         value = self.op.eval()
         env.add_local(self.name, value)
         
-@dataclass
-class ValueBindingTyped(IRNode, Ast):
-    name: Ident
-    type: Type
-    op: ValueBindingOp
-    
-    def __str__(self):
-        return f"\tlet {self.name}: {self.type} = {self.op}"
-    
-    def eval(self):
-        value = self.op.eval()
-        env.add_local(self.name, value)
-    
-ValueBinding = Union[ValueBindingUntyped, ValueBindingTyped]
-
 @dataclass
 class Br(IRNode, Ast):
     cond: Value
@@ -443,6 +428,9 @@ class BaseTransformer(Transformer):
     gep = lambda _, items: Gep(items[0], items[1], [(items[i], items[i+1]) for i in range(2, len(items), 2)])
     
     fncall = lambda _, items: Fncall(items[0], items[1:])
+    
+    value_binding_untyped = lambda _, items: ValueBinding(items[0], items[1])
+    value_binding_typed = lambda _, items: ValueBinding(items[0], items[2])
     
     ret = lambda _, items: Ret(items[1])
     
