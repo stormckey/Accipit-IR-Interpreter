@@ -43,7 +43,8 @@
     }
     fn @main() -> i32 {
     %Lentry:
-        let %res = call @factorial, 5
+        let %n = call @read
+        let %res = call @factorial, %n
         let %0 = call @write, %res
         ret 0
     }

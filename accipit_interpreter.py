@@ -98,7 +98,7 @@ class Environment():
     def __init__(self):
         self.global_env: dict[str, Any] = {}
         self.frames: list[dict[str, Any]] = []
-        self.stack: list[int] = [0]*1024
+        self.memory: list[int] = [0]*1024
         self.capacity: int = 1024
         self.size: int = 0
         
@@ -112,12 +112,12 @@ class Environment():
         if self.size + size > self.capacity:
             size_lacked = self.size + size - self.capacity
             size_to_extend = (size_lacked + 1023) // 1024 * 1024
-            self.stack.extend([0] * size_to_extend)
+            self.memory.extend([0] * size_to_extend)
             self.capacity += size_to_extend
         addr = self.size
         self.size += size
         if init:
-            self.stack[addr:addr+size] = init
+            self.memory[addr:addr+size] = init
         return Ptr(addr)
 
     def add_global(self, name, value: Any):
@@ -146,13 +146,13 @@ class Environment():
         ptr = self.get(name)
         if not isinstance(ptr, Ptr):
             raise SemanticError(f"{name} is not a pointer.")
-        self.stack[ptr.addr] = value
+        self.memory[ptr.addr] = value
         
     def load(self, name: Ident) -> int:
         ptr = self.get(name)
         if not isinstance(ptr, Ptr):
             raise SemanticError(f"{name} is not a pointer.")
-        return self.stack[ptr.addr]
+        return self.memory[ptr.addr]
         
     def clear(self):
         self.global_env.clear()
@@ -504,26 +504,20 @@ def parse(file: str) -> Program:
         print(e.get_context(text))
         print(f"Syntax error at position {e.column}: {e}")
         exit(1)
-        
-def eval() -> int: 
-    main = env.global_env.get("@main")
-    if main is None or not isinstance(main, FunDefn):
-        raise SemanticError("Main function is not defined.")
-    return main.eval([])
 
 if __name__ == "__main__":
-    arg_parser = argparse.ArgumentParser(
-        description="Interpreter for Accipit IR")
+    arg_parser = argparse.ArgumentParser(description="Interpreter for Accipit IR")
     arg_parser.add_argument("file", type=str, help="The IR file to interpret.")
-    arg_parser.add_argument("-d", "--debug", action="store_true",
-                            help="Whether to print debug info.")
+    arg_parser.add_argument("-d", "--debug", action="store_true", help="Whether to print debug info.")
     args = arg_parser.parse_args()
     program = parse(args.file)
     if args.debug:
         DEBUG = True
-        print("Debug mode on.")
         print(f"The parsed AST is:\n{program}")
-    return_value = eval()
+    main = env.global_env.get("@main")
+    if main is None or not isinstance(main, FunDefn):
+        raise SemanticError("Main function is not defined.")
+    return_value = main.eval([])
     colored_return_value = f"\033[1;32m{return_value}\033[0m" if return_value == 0 else f"\033[1;31m{return_value}\033[0m"
     print(f'Exit with code {colored_return_value}.')
     exit(return_value)

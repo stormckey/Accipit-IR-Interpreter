@@ -1,8 +1,7 @@
 from lark import Lark
 import io
 import contextlib
-from accipit_interpreter import accipit_grammar, accipit_transformer, env, eval
-import pytest
+from accipit_interpreter import accipit_grammar, accipit_transformer, env, FunDefn
 
 def helper_test_with_text(text: str, answer: str):
     parser = Lark(accipit_grammar, parser="lalr", transformer=accipit_transformer, start="program")
@@ -11,7 +10,9 @@ def helper_test_with_text(text: str, answer: str):
 
     output = io.StringIO()
     with contextlib.redirect_stdout(output):
-        eval()
+        main = env.global_env.get("@main")
+        assert main is not None and isinstance(main, FunDefn)
+        main.eval([])
         
     assert output.getvalue() == answer
 
