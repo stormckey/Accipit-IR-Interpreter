@@ -28,10 +28,9 @@ class IRNode():
         return wrapper
     
     def __getattribute__(self, name):
-        # This intercepts the access to methods and wraps them if they are callable
         obj = super().__getattribute__(name)
         if DEBUG and callable(obj) and name == "eval":
-            return self.method_wrapper(obj)  # Wrap the method
+            return self.method_wrapper(obj)
         return obj
 
     def __str__(self):
@@ -40,6 +39,9 @@ class IRNode():
 @dataclass
 class IntConst(Ast):
     value: int
+    
+    def __str__(self):
+        return str(self.value)
     
     def eval(self) -> int:
         return self.value
@@ -100,10 +102,10 @@ class Environment():
         self.capacity: int = 1024
         self.size: int = 0
         
-    def push_stack(self):
+    def push_frame(self):
         self.frames.append({})
 
-    def pop_stack(self):
+    def pop_frame(self):
         self.frames.pop()
         
     def allocate(self, size: int, init: list[int] = []) -> Ptr:
@@ -307,7 +309,7 @@ class PList(IRNode):
     
     def eval(self, values: list[Value]):
         values = [value.eval() for value in values]
-        env.push_stack()
+        env.push_frame()
         for (name, _), value in zip(self.params, values):
             env.add_local(name, value)
     
@@ -378,7 +380,7 @@ class FunDefn(IRNode, Ast):
         for bb in self.body.bbs:
             env.add_local(bb.label, bb)
         return_value = self.body.eval()
-        env.pop_stack()
+        env.pop_frame()
         return return_value
     
     
