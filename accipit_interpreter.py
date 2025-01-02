@@ -21,9 +21,9 @@ class IRNode(ast_utils.Ast):
             step = STEP
             STEP = STEP + 1
             name = self.__str__().split('\n')[0]
-            print(f"[STEP {step}.evaluating {name} with args={args}]")
+            print(f"[STEP {step}. Evaluating {name} with args={args}]")
             result = func(*args, **kwargs)
-            print(f"[STEP {step}.returned {result}]")
+            print(f"[STEP {step}. Returned {result}]")
             return result
         return wrapper
     
@@ -34,36 +34,30 @@ class IRNode(ast_utils.Ast):
             return self.method_wrapper(obj)  # Wrap the method
         return obj
 
+    def __str__(self):
+        return self.__class__.__name__ + " " + "".join(f"({attr})" for attr in self.__dict__.values())
+
 @dataclass
 class IntConst(IRNode):
     value: int
-
-    def __str__(self):
-        return str(self.value)
     
     def eval(self) -> int:
         return self.value
     
 @dataclass
 class NoneConst():
-    def __str__(self):
-        return "none"
-    
     def eval(self):
         return 1
     
 @dataclass
 class UnitConst():
-    def __str__(self):
-        return "()"
-    
     def eval(self) -> UnitConst:
         return self
     
 @dataclass 
 class Ident:
     name: str
-
+    
     def __str__(self):
         return self.name
     
@@ -75,23 +69,14 @@ Value = Union[IntConst, NoneConst, UnitConst, Ident]
 @dataclass
 class I32(IRNode):
     _name: Token
-    
-    def __str__(self):
-        return "i32"
 
 @dataclass
 class Unit(IRNode):
     _name: Token
     
-    def __str__(self):
-        return "()"
-    
 @dataclass
 class Pointer:
     name: str
-    
-    def __str__(self):
-        return self.name
 
 @dataclass
 class FunType:
@@ -179,9 +164,6 @@ class BinExpr(IRNode):
     v1: Value
     v2: Value
     
-    def __str__(self):
-        return f"{self.binop} {self.v1}, {self.v2}"
-    
     def eval(self):
         v1 = self.v1.eval()
         v2 = self.v2.eval()
@@ -221,9 +203,6 @@ class Alloca(IRNode):
     tpe: Type
     size: IntConst
     
-    def __str__(self):
-        return f"alloca {self.tpe}, {self.size}"
-
     def eval(self) -> Ptr:
         return env.allocate(self.size.eval())
 
@@ -232,9 +211,6 @@ class Alloca(IRNode):
 class Load(IRNode):
     name: Ident
     
-    def __str__(self):
-        return f"load {self.name}"
-    
     def eval(self):
         return env.load(self.name)
 
@@ -242,9 +218,6 @@ class Load(IRNode):
 class Store(IRNode):
     value: Value
     name: Ident
-    
-    def __str__(self):
-        return f"store {self.value}, {self.name}"
     
     def eval(self):
         env.store(self.name, self.value.eval())
@@ -319,9 +292,6 @@ class Br(IRNode):
     label1: Ident
     label2: Ident
     
-    def __str__(self):
-        return f"\tbr {self.cond}, label {self.label1}, label {self.label2}"
-    
     def eval(self) -> BasicBlock:
         target = self.label1 if self.cond.eval() else self.label2
         return env.get(target).eval()
@@ -330,9 +300,6 @@ class Br(IRNode):
 class Jmp(IRNode):
     label: Ident
     
-    def __str__(self):
-        return f"\tjmp label {self.label}"
-    
     def eval(self) -> BasicBlock:
         return env.get(self.label).eval()
 
@@ -340,9 +307,6 @@ class Jmp(IRNode):
 class Ret(IRNode):
     _keyword: Token
     value: Value
-    
-    def __str__(self):
-        return f"\tret {self.value}"
     
     def eval(self) -> Value:
         return self.value.eval()
@@ -353,9 +317,6 @@ Terminator = Union[Br, Jmp, Ret]
 @dataclass
 class PList:
     params: list[tuple[Ident, Type]]
-    
-    def __str__(self):
-        return ", ".join(f"{name} : {tpe}" for name, tpe in self.params)
     
     def eval(self, values: list[Value]):
         values = [value.eval() for value in values]
